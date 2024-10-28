@@ -1,20 +1,31 @@
-using System.Collections;
-using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
-using UnityEngine.UIElements;
 
+[ExecuteInEditMode]
 public class Gear : MonoBehaviour
 {
     public int toothCount = 1;
     public float powerLevel = 0.0f;
-    public float poweredRotationSpeed = 1.0f;
-    
+    public float powerEfficiency = 1.0f;
+
+    public bool hasInfinitePower = false;
+
+    public GearRootCylinder rootCylinderPrefab;
     public GearTooth toothPrefab;
 
-    public GearRootCylinder rootCylinder;
+    public float materialDensity = 1.0f;
+    public Material renderMaterial = null;
     public GearToothSet toothSet;
 
     private int previousToothCount = 0;
+
+    public GearRootCylinder rootCylinder
+    {
+        get
+        {
+            return GetComponentInChildren<GearRootCylinder>();
+        }
+    }
 
     public GearTooth[] teeth
     {
@@ -24,8 +35,36 @@ public class Gear : MonoBehaviour
         }
     }
 
-    public void ApplyPoweredRotation()
+    public float mass
     {
+        get
+        {
+            return materialDensity + (toothCount * toothCount) * materialDensity * 0.01f;
+        }
+    }
+
+    public void DrainPower(float amount = 1.0f)
+    {
+        if (hasInfinitePower)
+        {
+            return;
+        }
+
+        powerLevel = powerLevel - amount;
+
+        if (powerLevel < 0.0f)
+            powerLevel = 0.0f;
+    }
+
+    private void ApplyPoweredRotation()
+    {
+#if UNITY_EDITOR
+        if (!EditorApplication.isPlaying)
+        {
+            return;
+        }
+#endif
+
         if (powerLevel <= 0.0f)
         {
             return;
@@ -33,16 +72,38 @@ public class Gear : MonoBehaviour
 
         var rotation = new Vector3(
             0,
-            (poweredRotationSpeed * 1000.0f / toothCount) * powerLevel * Time.deltaTime,
+            (1000.0f / toothCount) * powerLevel * Time.deltaTime,
             0
         );
         
-        transform.Rotate(rotation);
+        // transform.Rotate(rotation);
 
-        powerLevel = powerLevel - 1.0f * Time.deltaTime;
+        var rigidbody = GetComponent<Rigidbody>();
 
-        if (powerLevel < 0.0f)
-            powerLevel = 0.0f;
+        rigidbody.AddTorque(rotation);
+
+        DrainPower(Time.deltaTime);
+    }
+
+    private void CombineMeshes()
+    {
+        MeshFilter[] meshFilters = GetComponentsInChildren<MeshFilter>();
+        CombineInstance[] combine = new CombineInstance[meshFilters.Length];
+
+        int i = 0;
+        while (i < meshFilters.Length)
+        {
+            combine[i].mesh = meshFilters[i].sharedMesh;
+            combine[i].transform = meshFilters[i].transform.localToWorldMatrix;
+            meshFilters[i].gameObject.SetActive(false);
+
+            i++;
+        }
+
+        Mesh mesh = new Mesh();
+        mesh.CombineMeshes(combine);
+        transform.GetComponent<MeshFilter>().sharedMesh = mesh;
+        transform.gameObject.SetActive(true);
     }
 
     private void DestroyAllTeeth()
@@ -52,8 +113,22 @@ public class Gear : MonoBehaviour
             if (tooth == toothPrefab)
                 continue;
 
-            Destroy(tooth.gameObject);
+            if (Application.isEditor)
+                DestroyImmediate(tooth.gameObject);
+            else
+                Destroy(tooth.gameObject);
         }
+    }
+
+    private void DestroyRootCylinder()
+    {
+        if (rootCylinder == null)
+            return;
+
+        if (Application.isEditor)
+            DestroyImmediate(rootCylinder.gameObject);
+        else
+            Destroy(rootCylinder.gameObject);
     }
 
     private void GenerateTeeth()
@@ -72,6 +147,19 @@ public class Gear : MonoBehaviour
         }
     }
 
+    private void GenerateRootCylinder()
+    {
+        var rootCylinder = Instantiate(rootCylinderPrefab);
+
+        rootCylinder.transform.parent = transform;
+    }
+
+    private void RegenerateRootCylinder()
+    {
+        DestroyRootCylinder();
+        GenerateRootCylinder();
+    }
+
     private void RegenerateTeeth()
     {
         DestroyAllTeeth();
@@ -86,7 +174,13 @@ public class Gear : MonoBehaviour
     private void Update()
     {
         UpdateToothCount();
+        UpdateMass();
         ApplyPoweredRotation();
+    }
+
+    private void UpdateMass()
+    {
+        GetComponent<Rigidbody>().mass = mass;
     }
 
     private void UpdateToothCount()

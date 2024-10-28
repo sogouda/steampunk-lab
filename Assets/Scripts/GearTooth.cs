@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+[ExecuteInEditMode]
 public class GearTooth : MonoBehaviour
 {
     public Gear gear;
@@ -22,13 +23,26 @@ public class GearTooth : MonoBehaviour
     {
         get
         {
-            return 0.0005f * (gear.toothCount - 1);
+            var value = 0.005f * (gear.toothCount - 1);
+
+            return value;
         }
+    }
+
+    private void Start()
+    {
+        name = "Gear Tooth";
+
+        transform.localScale = new Vector3(
+            transform.localScale.x * 2.4f,
+            transform.localScale.y,
+            transform.localScale.z
+        );
     }
 
     void Update()
     {
-        if (gear == null || gear.toothSet == null)
+        if (gear == null || gear.rootCylinder == null || gear.toothSet == null)
             return;
 
         // Make this object a child of the gear tooth set.
@@ -37,12 +51,13 @@ public class GearTooth : MonoBehaviour
         if (toothId <= 0)
             toothId = 1;
 
+        UpdateMaterial();
         UpdateScale();
 
         transform.localPosition = new Vector3(
             0,
             0,
-            gear.rootCylinder.localScaleFactor * 0.5f
+            0.035f + (localBonusLength * 0.5f + gear.rootCylinder.localScaleFactor * 0.15f) * 2.0f
         );
 
         transform.localRotation = new Quaternion();
@@ -53,6 +68,19 @@ public class GearTooth : MonoBehaviour
             Vector3.up,
             (360.0f / gear.toothCount) * (toothId - 1.0f)
         );
+
+        // transform.Rotate(new Vector3(0, 0, 90));
+    }
+
+    private void UpdateMaterial()
+    {
+        if (gear == null || gear.renderMaterial == null)
+            return;
+
+        foreach (var meshRenderer in GetComponentsInChildren<MeshRenderer>())
+        {
+            meshRenderer.material = gear.renderMaterial;
+        }
     }
 
     private void UpdateScale()
@@ -60,7 +88,7 @@ public class GearTooth : MonoBehaviour
         transform.localScale = new Vector3(
             transform.localScale.x,
             transform.localScale.y,
-            0.25f + localBonusLength
+            1.0f + localBonusLength * 5.0f
         );
     }
 }
